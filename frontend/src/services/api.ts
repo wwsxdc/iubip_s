@@ -33,8 +33,11 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Обёртка для запросов
+// Обёртка для запросов с проверкой CSRF
 const request = async <T = any>(url: string, options = {}): Promise<T> => {
+  // Получаем CSRF токен перед каждым запросом, который требует авторизации
+  await apiClient.get('/sanctum/csrf-cookie');
+
   const response = await apiClient.request<T>({
     url,
     ...options,

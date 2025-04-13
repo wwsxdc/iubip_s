@@ -1,70 +1,63 @@
+import axios from "axios";
 import { Queue, Ticket, User } from "@/types";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-const handleResponse = async (response: Response) => {
-  if (!response.ok) {
-    if (response.status === 401) {
-      // Redirect to login page if unauthorized
+// Создаём экземпляр axios
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true, // включаем передачу куки
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+  },
+});
+
+// Общая обработка ошибок
+apiClient.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
       window.location.href = '/login';
-      throw new Error('Unauthorized');
+      return Promise.reject(new Error('Unauthorized'));
     }
-    
-    let errorMessage;
-    try {
-      const errorData = await response.json();
-      errorMessage = errorData.message || errorData.error || response.statusText;
-    } catch {
-      errorMessage = response.statusText;
-    }
-    throw new Error(errorMessage);
+
+    const errorMessage =
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      error.message ||
+      'Unknown error';
+
+    return Promise.reject(new Error(errorMessage));
   }
-  return response.json();
-};
+);
 
-const request = async (endpoint: string, options: RequestInit = {}) => {
-  const defaultOptions: RequestInit = {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-  };
-
-  try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...defaultOptions,
-      ...options,
-      headers: {
-        ...defaultOptions.headers,
-        ...options.headers,
-      },
-    });
-
-    return handleResponse(response);
-  } catch (error) {
-    console.error(`API Error (${endpoint}):`, error);
-    throw error;
-  }
+// Обёртка для запросов
+const request = async <T = any>(url: string, options = {}): Promise<T> => {
+  const response = await apiClient.request<T>({
+    url,
+    ...options,
+  });
+  return response.data;
 };
 
 export const api = {
   // Queue methods
-  getQueues: () => request('/queues'),
-  getQueueById: (id: number) => request(`/queues/${id}`),
+  getQueues: () => request<Queue[]>('/api/queues'),
+  getQueueById: (id: number) => request<Queue>(`/api/queues/${id}`),
 
   // Ticket methods
-  getTickets: () => request('/tickets'),
-  getTicketById: (id: number) => request(`/tickets/${id}`),
-  createTicket: (queueId: number) => request('/tickets', {
+  getTickets: () => request<Ticket[]>('/api/tickets'),
+  getTicketById: (id: number) => request<Ticket>(`/api/tickets/${id}`),
+  createTicket: (queueId: number) => request<Ticket>('/api/tickets', {
     method: 'POST',
-    body: JSON.stringify({ queueId }),
+    data: { queueId },
   }),
-  cancelTicket: (ticketId: number) => request(`/tickets/${ticketId}`, {
+  cancelTicket: (ticketId: number) => request<void>(`/api/tickets/${ticketId}`, {
     method: 'DELETE',
   }),
 
   // User methods
-  getUser: () => request('/user'),
+  getUser: () => request<User>('/api/user'),
 };
